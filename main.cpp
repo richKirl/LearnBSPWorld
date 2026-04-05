@@ -22,6 +22,7 @@ struct Camera {
     float gravity = -0.015f;  // Сила притяжения (каждый кадр)
     float jumpPower = 0.4f;   // Высота прыжка
     bool isGrounded = false;  // Стоим ли мы на чем-то
+    bool isMoving=false;
     void update(){
         if (pitch > 89.0f) pitch = 89.0f;
         if (pitch < -89.0f) pitch = -89.0f;
@@ -31,6 +32,7 @@ struct Camera {
         direction.z = std::sin((yaw) * (PIPERGRAD)) * std::cos((pitch) * (PIPERGRAD));
         cameraFront = direction.normalize();
     }
+
     Mat4 getViewMatrix() const {
         return Mat4::lookAt(pos, pos + getForward(), {0, 1, 0});
     }
@@ -375,6 +377,84 @@ void drawFireballs(Shader& shader, Mat4 proj, Mat4 view, Vec3<float> camPos, uns
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 }
+
+template<typename T>
+void inputContoller(T& camera){
+    const uint8_t* state = SDL_GetKeyboardState(NULL);
+    //if (state[SDL_SCANCODE_ESCAPE]) app.run = false;
+    // 1. Считаем желаемое направление движения (WASD)
+    Vec3<float> wishDir{0, 0, 0};
+    Vec3<float> forward = camera.getForward();
+    forward.y = 1.0; // Ходим только по горизонтали
+    forward = forward.normalize();
+    Vec3<float> right = camera.getRight();
+    camera.isMoving = false;
+    if (state[SDL_SCANCODE_W]) {wishDir = wishDir + forward;camera.isMoving = true;}
+    if (state[SDL_SCANCODE_S]) {wishDir = wishDir - forward;camera.isMoving = true;}
+    if (state[SDL_SCANCODE_A]) {wishDir = wishDir - right;camera.isMoving = true;}
+    if (state[SDL_SCANCODE_D]) {wishDir = wishDir + right;camera.isMoving = true;}
+    // if (state[SDL_SCANCODE_N]) { // Клавиша N - Noclip
+    //     camera.pos.y += 1.0f; // Просто подбросить вверх
+    //     camera.velocity = {0,0,0};
+    // }
+    // 2. Применяем горизонтальную скорость и трение
+    if (wishDir.length() > 0) {
+        wishDir = wishDir.normalize() * camera.walkSpeed;
+        camera.velocity.x = wishDir.x;
+        camera.velocity.z = wishDir.z;
+    } else {
+        camera.velocity.x *= 0.5f; // Резкое торможение
+        camera.velocity.z *= 0.5f;
+    }
+
+    // 3. Гравитация и Прыжок
+    camera.velocity.y += camera.gravity;
+    if (state[SDL_SCANCODE_SPACE] && camera.isGrounded) {
+        camera.velocity.y = camera.jumpPower;
+        camera.isGrounded = false;
+        camera.isMoving=true;
+    }
+}
+
+template<typename T>
+void collederController(T& camera,const Map& world){
+    // 4. ПРОВЕРКА КОЛЛИЗИЙ (Посекундное движение)
+    // Пробуем сдвинуть по X
+    Vec3<float> nextPos = camera.pos;
+    nextPos.x += camera.velocity.x;
+    if (!isColliding(nextPos, world)) camera.pos.x = nextPos.x;
+
+    // Пробуем сдвинуть по Z
+    nextPos = camera.pos;
+    nextPos.z += camera.velocity.z;
+    if (!isColliding(nextPos, world)) camera.pos.z = nextPos.z;
+
+    // Пробуем сдвинуть по Y (Вертикаль)
+    nextPos = camera.pos;
+    nextPos.y += camera.velocity.y;
+
+    if (!isColliding(nextPos, world)) {
+        camera.pos.y = nextPos.y;
+        camera.isGrounded = false;
+    } else {
+        // ВРЕЗАЛИСЬ
+        if (camera.velocity.y < 0) { // Если летели ВНИЗ
+            camera.isGrounded = true;
+            // ВАЖНО: Выталкиваем игрока ПРЯМО на поверхность браша
+            // Для этого нужно найти, на какой именно браш мы упали.
+            // Но пока просто остановим падение:
+            camera.velocity.y = 0;
+        } else { // Если ударились головой об потолок
+            camera.velocity.y = -0.01f; // Чуть-чуть оттолкнуть вниз
+        }
+    }
+    //if(camera.isGrounded) camera.velocity.y=1.0f;
+    // В игровом цикле (Update):
+    for(auto& e : enemies) {
+        e.update(camera.pos, 0.016f);
+    }
+}
+
 int main(int argc, char* argv[]) {
     StateApp app;
     initApp(app); // Здесь должны инициализироваться SDL и OpenGL контекст
@@ -649,76 +729,9 @@ int main(int argc, char* argv[]) {
         }
         gunOffsetZ *= 0.85f;
         // Получаем состояние всех клавиш
-        const uint8_t* state = SDL_GetKeyboardState(NULL);
-        //if (state[SDL_SCANCODE_ESCAPE]) app.run = false;
-        // 1. Считаем желаемое направление движения (WASD)
-        Vec3<float> wishDir{0, 0, 0};
-        Vec3<float> forward = camera.getForward();
-        forward.y = 1.0; // Ходим только по горизонтали
-        forward = forward.normalize();
-        Vec3<float> right = camera.getRight();
-        bool isMoving = false;
-        if (state[SDL_SCANCODE_W]) {wishDir = wishDir + forward;isMoving = true;}
-        if (state[SDL_SCANCODE_S]) {wishDir = wishDir - forward;isMoving = true;}
-        if (state[SDL_SCANCODE_A]) {wishDir = wishDir - right;isMoving = true;}
-        if (state[SDL_SCANCODE_D]) {wishDir = wishDir + right;isMoving = true;}
-        // if (state[SDL_SCANCODE_N]) { // Клавиша N - Noclip
-        //     camera.pos.y += 1.0f; // Просто подбросить вверх
-        //     camera.velocity = {0,0,0};
-        // }
-        // 2. Применяем горизонтальную скорость и трение
-        if (wishDir.length() > 0) {
-            wishDir = wishDir.normalize() * camera.walkSpeed;
-            camera.velocity.x = wishDir.x;
-            camera.velocity.z = wishDir.z;
-        } else {
-            camera.velocity.x *= 0.5f; // Резкое торможение
-            camera.velocity.z *= 0.5f;
-        }
+        inputContoller(camera);
 
-        // 3. Гравитация и Прыжок
-        camera.velocity.y += camera.gravity;
-        if (state[SDL_SCANCODE_SPACE] && camera.isGrounded) {
-            camera.velocity.y = camera.jumpPower;
-            camera.isGrounded = false;
-            isMoving=true;
-        }
-
-        // 4. ПРОВЕРКА КОЛЛИЗИЙ (Посекундное движение)
-        // Пробуем сдвинуть по X
-        Vec3<float> nextPos = camera.pos;
-        nextPos.x += camera.velocity.x;
-        if (!isColliding(nextPos, world)) camera.pos.x = nextPos.x;
-
-        // Пробуем сдвинуть по Z
-        nextPos = camera.pos;
-        nextPos.z += camera.velocity.z;
-        if (!isColliding(nextPos, world)) camera.pos.z = nextPos.z;
-
-        // Пробуем сдвинуть по Y (Вертикаль)
-        nextPos = camera.pos;
-        nextPos.y += camera.velocity.y;
-
-        if (!isColliding(nextPos, world)) {
-            camera.pos.y = nextPos.y;
-            camera.isGrounded = false;
-        } else {
-            // ВРЕЗАЛИСЬ
-            if (camera.velocity.y < 0) { // Если летели ВНИЗ
-                camera.isGrounded = true;
-                // ВАЖНО: Выталкиваем игрока ПРЯМО на поверхность браша
-                // Для этого нужно найти, на какой именно браш мы упали.
-                // Но пока просто остановим падение:
-                camera.velocity.y = 0;
-            } else { // Если ударились головой об потолок
-                camera.velocity.y = -0.01f; // Чуть-чуть оттолкнуть вниз
-            }
-        }
-        //if(camera.isGrounded) camera.velocity.y=1.0f;
-        // В игровом цикле (Update):
-        for(auto& e : enemies) {
-            e.update(camera.pos, 0.016f);
-        }
+        collederController(camera,world);
 
         // Очистка экрана
         glClearColor(0.1f, 1.1f, 0.1f, 1.0f);
@@ -783,7 +796,7 @@ int main(int argc, char* argv[]) {
 
         float time= SDL_GetTicks() / 1000.0f;
 
-        drawGun(shader,locsObject,aspect,time,isMoving,metallTex,proj,gunOffsetZ);
+        drawGun(shader,locsObject,aspect,time,camera.isMoving,metallTex,proj,gunOffsetZ);
         //Mat4::translate(0, 0, gunKick);
         // gunKick *= 0.9f;
         // flash *= 0.9f;
