@@ -9,9 +9,9 @@ module; // Начало глобального фрагмента
 #include <map>
 #include <string>
 #include <memory>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+// #include <glm/glm.hpp>
+// #include <glm/gtc/matrix_transform.hpp>
+// #include <glm/gtc/type_ptr.hpp>
 export module base3D;
 
 export struct Options{
