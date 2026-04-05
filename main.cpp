@@ -417,7 +417,7 @@ void inputContoller(T& camera){
 }
 
 template<typename T>
-void collederController(T& camera,const Map& world){
+void colliderController(T& camera,const Map& world){
     // 4. ПРОВЕРКА КОЛЛИЗИЙ (Посекундное движение)
     // Пробуем сдвинуть по X
     Vec3<float> nextPos = camera.pos;
@@ -731,7 +731,7 @@ int main(int argc, char* argv[]) {
         // Получаем состояние всех клавиш
         inputContoller(camera);
 
-        collederController(camera,world);
+        colliderController(camera,world);
 
         // Очистка экрана
         glClearColor(0.1f, 1.1f, 0.1f, 1.0f);
