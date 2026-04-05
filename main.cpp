@@ -89,30 +89,7 @@ struct Platform {
     }
 };
 
-// // В основном цикле:
-// platform.update(SDL_GetTicks() * 0.001f);
 
-// // "Хардкор" коллизия с лифтом:
-// if (std::abs(camera.pos.x - platform.pos.x) < platform.size.x/2 &&
-//     std::abs(camera.pos.z - platform.pos.z) < platform.size.z/2) {
-//     if (camera.pos.y < platform.pos.y + 2.0f) { // 2.0f - рост игрока
-//         camera.pos.y = platform.pos.y + 2.0f;
-//         camera.velocity.y = 0;
-//     }
-// }
-// bool checkCollision(Vec3<float> p, const Map& map) {
-//     for (const auto& b : map.brushes) {
-//         // Проверяем, попадает ли точка p внутрь коробки b
-//         float r = 0.5f; // "Радиус" игрока
-//         if (p.x + r > b.pos.x - b.size.x/2 && p.x - r < b.pos.x + b.size.x/2 &&
-//             p.y + r > b.pos.y - b.size.y/2 && p.y - r < b.pos.y + b.size.y/2 &&
-//             p.z + r > b.pos.z - b.size.z/2 && p.z - r < b.pos.z + b.size.z/2)
-//         {
-//             return true; // Столкновение!
-//         }
-//     }
-//     return false;
-// }
 bool isColliding(Vec3<float> p, const Map& map) {
     float r = 0.4f; // Радиус игрока (ширина)
     float h = 1.8f; // Рост игрока
@@ -685,10 +662,10 @@ int main(int argc, char* argv[]) {
         if (state[SDL_SCANCODE_S]) {wishDir = wishDir - forward;isMoving = true;}
         if (state[SDL_SCANCODE_A]) {wishDir = wishDir - right;isMoving = true;}
         if (state[SDL_SCANCODE_D]) {wishDir = wishDir + right;isMoving = true;}
-        if (state[SDL_SCANCODE_N]) { // Клавиша N - Noclip
-            camera.pos.y += 1.0f; // Просто подбросить вверх
-            camera.velocity = {0,0,0};
-        }
+        // if (state[SDL_SCANCODE_N]) { // Клавиша N - Noclip
+        //     camera.pos.y += 1.0f; // Просто подбросить вверх
+        //     camera.velocity = {0,0,0};
+        // }
         // 2. Применяем горизонтальную скорость и трение
         if (wishDir.length() > 0) {
             wishDir = wishDir.normalize() * camera.walkSpeed;
@@ -884,3 +861,27 @@ int main(int argc, char* argv[]) {
 // 4. ЛЕСТНИЦА (ведет на левый балкон)
 //world.addStairs({-30, 0, -20}, {0, 0, 1}, 20, 10.0f, wallTex);
 //world.addBox({0, 0, 0}, {500, 500, 500},skyboxTex);
+// // В основном цикле:
+// platform.update(SDL_GetTicks() * 0.001f);
+
+// // "Хардкор" коллизия с лифтом:
+// if (std::abs(camera.pos.x - platform.pos.x) < platform.size.x/2 &&
+//     std::abs(camera.pos.z - platform.pos.z) < platform.size.z/2) {
+//     if (camera.pos.y < platform.pos.y + 2.0f) { // 2.0f - рост игрока
+//         camera.pos.y = platform.pos.y + 2.0f;
+//         camera.velocity.y = 0;
+//     }
+// }
+// bool checkCollision(Vec3<float> p, const Map& map) {
+//     for (const auto& b : map.brushes) {
+//         // Проверяем, попадает ли точка p внутрь коробки b
+//         float r = 0.5f; // "Радиус" игрока
+//         if (p.x + r > b.pos.x - b.size.x/2 && p.x - r < b.pos.x + b.size.x/2 &&
+//             p.y + r > b.pos.y - b.size.y/2 && p.y - r < b.pos.y + b.size.y/2 &&
+//             p.z + r > b.pos.z - b.size.z/2 && p.z - r < b.pos.z + b.size.z/2)
+//         {
+//             return true; // Столкновение!
+//         }
+//     }
+//     return false;
+// }
