@@ -1,0 +1,15 @@
+CompileFlags:
+  Add:
+    [
+      -std=c++26,
+      -stdlib=libc++,
+      -I/usr/lib/llvm-20/share/libc++/v1,
+      -fmodule-file=std=std.pcm,
+      -fmodule-file=MathGeometry=MathGeometry.pcm,
+      -fmodule-file=base3D=base3D.pcm,
+      -fmodule-file=QuadroTree=QuadroTree.pcm,
+      -fmodule-file=BSPTool=BSPTool.pcm,
+      -fmodule-file=Shader=Shader.pcm,
+      -fmodule-file=Animation=Animation.pcm,
+      -fmodule-file=Shaders=Shaders.pcm,
+    ]
