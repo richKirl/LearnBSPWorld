@@ -309,7 +309,7 @@ struct Fireball {
                 // Спавним новую частицу в хвосте
                 p.pos = position;
                 // Небольшой разброс назад
-                p.vel = (direction * -5.0f) + Vec3<float>{(rand()%10-5)*0.5f, (rand()%10-5)*0.5f, (rand()%10-5)*0.5f};
+                p.vel = (direction * -0.1f) + Vec3<float>{(rand()%10-5)*0.5f, (rand()%10-5)*0.5f, (rand()%10-5)*0.5f};
                 p.life = 0.3f;
             }
         }
@@ -318,10 +318,21 @@ struct Fireball {
 
 std::vector<Fireball> fireballs;
 
-void shootFireball(Vec3<float> playerPos, Vec3<float> playerForward) {
-    fireballs.emplace_back(playerPos + (playerForward * 1.5f), playerForward);
-}
+// void shootFireball(Vec3<float> playerPos, Vec3<float> playerForward) {
+//     fireballs.emplace_back(playerPos + (playerForward * 1.5f), playerForward);
+// }
+void shootFireball(Vec3<float> camPos, Vec3<float> camForward, Vec3<float> camRight, Vec3<float> camUp) {
+    Fireball f(camPos, camForward);
 
+    // Смещаем точку спавна (подбираем под визуальное положение пушки)
+    // 0.4f вправо, -0.3f вниз, 1.0f вперед (чтобы не видеть шар "внутри" головы)
+    Vec3<float> gunOffset = (camRight * 1.0f) + (camUp * 0.5f) + (camForward * +5.0f);
+
+    f.position = camPos + gunOffset;
+    f.direction = camForward;
+
+    fireballs.push_back(f);
+}
 void updateFireballs(float dt, Enemy& enemy) {
     for (auto& f : fireballs) {
         if (!f.active) continue;
@@ -336,25 +347,57 @@ void updateFireballs(float dt, Enemy& enemy) {
     fireballs.erase(std::remove_if(fireballs.begin(), fireballs.end(),
                    [](const Fireball& f) { return !f.active; }), fireballs.end());
 }
+unsigned int quadVAO, quadVBO;
 
-// Функция отрисовки одного билборда (квадрата, развернутого к камере)
-void drawBillboard(Shader& shader, Vec3<float> pos, float size, Vec3<float> camPos) {
-    // Вычисляем матрицу модели так, чтобы она всегда смотрела на камеру (простой способ)
-    Mat4 model = Mat4::translate(pos.x, pos.y, pos.z);
+void initQuad() {
+    // Координаты (X, Y, Z) и текстурные координаты (U, V)
+    // Квадрат от -0.5 до 0.5, чтобы центр был в (0,0) — так удобнее масштабировать
+    float vertices[] = {
+        // Позиции          // Текстурные координаты
+        -0.5f,  0.5f, 0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
 
-    // Обнуляем вращение в матрице вида или используем LookAt
-    // Здесь мы просто передаем позицию, а в шейдере (см. предыдущее сообщение)
-    // используем трюк с осями камеры. Если шейдер обычный — используем Scale:
-    model = model * Mat4::scale(size, size, size);
+        -0.5f,  0.5f, 0.0f,  0.0f, 1.0f,
+         0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f,  1.0f, 1.0f
+    };
 
-    //shader.setMat4("model", model);
-    // glDrawArrays(GL_TRIANGLES, 0, 6); // Рисуем квадрат
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+
+    glBindVertexArray(quadVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // Атрибут позиций (location = 0 в шейдере)
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+
+    // Атрибут текстурных координат (location = 1 в шейдере)
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    glBindVertexArray(0);
+}
+void drawBillboard(Shader& shader, Vec3<float> pos, float size) {
+    // Матрица модели: только перемещение и масштаб
+    // Вращение сбросится в самом шейдере (как мы писали выше)
+    Mat4 model = Mat4::translate(pos.x, pos.y, pos.z)
+               * Mat4::scale(size, size, size);
+
+    shader.setMat4("model", model);
+
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 }
 
 void drawFireballs(Shader& shader, Mat4 proj, Mat4 view, Vec3<float> camPos, unsigned int textureID) {
     shader.use();
-    //shader.setMat4("projection", proj);
-    //shader.setMat4("view", view);
+    shader.setMat4("projection", proj);
+    shader.setMat4("view", view);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE); // Режим "Свечение"
@@ -364,12 +407,16 @@ void drawFireballs(Shader& shader, Mat4 proj, Mat4 view, Vec3<float> camPos, uns
 
     for (auto& f : fireballs) {
         // 1. Рисуем "Ядро"
-        drawBillboard(shader, f.position, 0.8f, camPos);
+        shader.setFloat("uLife", 1.0f);
+        shader.setVec3("uColor", 1.0f, 0.6f, 0.2f);
+        drawBillboard(shader, f.position, 0.8f);
 
         // 2. Рисуем "Искры" шлейфа
         for (auto& p : f.trail) {
             if (p.life > 0) {
-                drawBillboard(shader, p.pos, p.size * (p.life / 0.3f), camPos);
+                shader.setFloat("uLife", p.life / 0.3f); // Нормализуем к 0..1
+                shader.setVec3("uColor", 1.0f, 0.2f, 0.0f);
+                drawBillboard(shader, p.pos, p.size * (p.life / 0.3f));
             }
         }
     }
@@ -575,15 +622,30 @@ int main(int argc, char* argv[]) {
         glVertices.push_back(v);
     }
 
+
+
+
     GLMesh cubeMesh;
     cubeMesh.setup(glVertices);
+
+
+
+
     // Загрузка шейдеров (пути к твоим файлам)
     Shader shader(vShader,fShader);
     Shader animshader(AVShader,AFShader);
+    Shader fireshader(PVShader,PFShader);
+    LocsObject fireLocs;
+    fireLocs.modelLoc = glGetUniformLocation(fireshader.ID, "model");
+    fireLocs.viewLoc = glGetUniformLocation(fireshader.ID, "view");
+    fireLocs.projLoc = glGetUniformLocation(fireshader.ID, "projection");
     AnimatedModel animModel;
 
     Camera camera;
     camera.update();
+    initQuad();
+    Fireball fireball(camera.pos,camera.getForward());
+
     Crosshair crosshair;
     crosshair.setup();
     int w,h;
@@ -684,6 +746,8 @@ int main(int argc, char* argv[]) {
     animLocs.modelLoc = glGetUniformLocation(animshader.ID, "model");
     animLocs.viewLoc = glGetUniformLocation(animshader.ID, "view");
     animLocs.projLoc = glGetUniformLocation(animshader.ID, "projection");
+
+
     Mat4 modelM=Mat4::translate(0.0f, 0.5f, -10.0f);
     Vec3<float> col={0.3f, 2.0f,0.3f};
     float dtime;
@@ -721,22 +785,6 @@ int main(int argc, char* argv[]) {
         // } else if (!(mouseState & (1 << ((1)-1)))) {
         //     rmbPressed = false;
         // }
-        float gunKick = 0.0f;
-        if (!(mouseState & (1 << ((1)-1)))) {
-            gunOffsetZ = 0.2f;
-            flash = 1.0f;
-            rmbPressed = false;
-        }
-        gunOffsetZ *= 0.85f;
-        // Получаем состояние всех клавиш
-        inputContoller(camera);
-
-        colliderController(camera,world);
-
-        // Очистка экрана
-        glClearColor(0.1f, 1.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         float eyeHeight = 1.6f; // Твой рост
         Vec3<float> eyePos = camera.pos;
         eyePos.y += eyeHeight; // Поднимаем "глаза" над "ногами"
@@ -746,6 +794,30 @@ int main(int argc, char* argv[]) {
         float fovRad = 45.0f * (PIPERGRAD);
         float aspect = 1290.0f/720.0f;
         Mat4 proj = Mat4::perspective(fovRad, aspect, 0.1f, 1000.0f);
+        float gunKick = 0.0f;
+        if ((mouseState & (1 << ((1)-1)))) {
+            gunOffsetZ = 0.2f;
+            flash = 1.0f;
+            rmbPressed = false;
+            shootFireball(camera.pos, camera.getForward(),camera.getRight(),{0,1,0});
+
+        }
+        gunOffsetZ *= 0.85f;
+        if (gunOffsetZ < 0.01f) gunOffsetZ = 0.0f;
+        for (auto &enemy:enemies){
+            updateFireballs(0.016f,enemy);
+        }
+        //fireball.update(0.016f);
+        // Получаем состояние всех клавиш
+        inputContoller(camera);
+
+        colliderController(camera,world);
+
+        // Очистка экрана
+        glClearColor(0.1f, 1.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
 
         //Mat4 model =Mat4::identity();
         // Рендеринг
@@ -805,7 +877,7 @@ int main(int argc, char* argv[]) {
         // glDisable(GL_DEPTH_TEST);
 
         // glEnable(GL_DEPTH_TEST);
-
+        drawFireballs(fireshader,proj,view, camera.pos,metallTex);
 
 
 
