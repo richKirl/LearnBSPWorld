@@ -137,6 +137,62 @@ export const char* AFShader = R"(
         FragColor = vec4(result*diff, 1.0);
     }
 )";
+
+export const char* PVShader = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;   // Координаты вершин квадрата (-0.5 до 0.5)
+    layout (location = 1) in vec2 aTexCoords;
+
+    out vec2 TexCoords;
+    out float ParticleLife; // Передаем время жизни для прозрачности
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+    uniform float uLife;    // Текущая жизнь частицы (от 1.0 до 0.0)
+
+    void main() {
+        TexCoords = aTexCoords;
+        ParticleLife = uLife;
+
+        // ТРЮК БИЛБОРДИНГА:
+        // Берем матрицу View-Model и сбрасываем в ней вращение (левый верхний угол 3x3)
+        mat4 modelView = view * model;
+
+        // Первая колонка — Right, Вторая — Up, Третья — Forward
+        // Делаем их единичными векторами (identity), чтобы убрать поворот модели
+        modelView[0][0] = 1.0; modelView[0][1] = 0.0; modelView[0][2] = 0.0;
+        modelView[1][0] = 0.0; modelView[1][1] = 1.0; modelView[1][2] = 0.0;
+        modelView[2][0] = 0.0; modelView[2][1] = 0.0; modelView[2][2] = 1.0;
+
+        // Теперь объект всегда ориентирован на камеру, но сохраняет позицию и масштаб
+        gl_Position = projection * modelView * vec4(aPos, 1.0);
+    }
+)";
+
+export const char* PFShader = R"(
+    #version 330 core
+    out vec4 FragColor;
+
+    in vec2 TexCoords;
+    in float ParticleLife;
+
+    uniform sampler2D sprite;
+    uniform vec3 uColor; // Можно передать (1.0, 0.5, 0.2) для оранжевого
+
+    void main() {
+        vec4 texColor = texture(sprite, TexCoords);
+
+        // Умножаем цвет текстуры на заданный цвет и на остаток жизни
+        // Это заставит искры плавно гаснуть в конце пути
+        vec3 finalColor = texColor.rgb * uColor * 2.0; // *2.0 для эффекта пересвета (bloom-like)
+        float alpha = texColor.a * ParticleLife;
+
+        FragColor = vec4(finalColor, alpha);
+    }
+
+)";
+
 // // fShader
 // uniform vec3 lightPositions[4]; // 4 лампы на комнату
 // void main() {
